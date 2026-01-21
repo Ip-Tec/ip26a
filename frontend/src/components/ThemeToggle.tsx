@@ -4,52 +4,60 @@ import { useEffect, useState } from "react";
 
 type Theme = "light" | "dark";
 
-const STORAGE_KEY = "ip26a-theme";
-
-function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
-  if (stored === "light" || stored === "dark") return stored;
-  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")
-    ?.matches;
-  return prefersDark ? "dark" : "light";
-}
-
+// This component is the ONLY place where theme logic exists.
+// It directly manipulates the <html> element's class list.
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("light");
-  const [mounted, setMounted] = useState(false);
+  const [theme, setTheme] = useState<Theme | null>(null);
 
+  // 1. Initialize theme ONCE on client-side mount.
+  useEffect(() => {
+    // Read from localStorage or fallback to system preference.
+    const stored = localStorage.getItem("theme") as Theme | null;
+    const initial = stored ?? 
+      (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    
+    setTheme(initial);
+  }, []); // Empty dependency array ensures this runs only once.
+
+  // 2. Apply theme to the document whenever the theme state changes.
+  useEffect(() => {
+    if (theme) {
+      if (theme === 'dark') {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+      localStorage.setItem("theme", theme);
+    }
+  }, [theme]);
+
+  // 3. Handle theme toggling on user action.
+  const toggleTheme = () => {
+    setTheme(currentTheme => currentTheme === "light" ? "dark" : "light");
+  };
+
+  // 4. Mount guard: Prevent the button from rendering on the server.
+  // This avoids a hydration mismatch for the button's text/icon content,
+  // as the server doesn't know the theme and cannot render the correct icon.
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
-    const initial = getInitialTheme();
-    setTheme(initial);
   }, []);
 
-  useEffect(() => {
-    if (mounted) {
-      document.documentElement.classList.toggle("dark", theme === "dark");
-      window.localStorage.setItem(STORAGE_KEY, theme);
-    }
-  }, [theme, mounted]);
-
-  const isDark = theme === "dark";
-
   if (!mounted) {
-    return (
-      <div className="inline-flex h-[29px] w-[60px] items-center gap-1 rounded-full border border-slate-300 bg-white/80 px-3 py-1 text-xs" />
-    );
+    // Render a placeholder or nothing on the server and initial client render.
+    // This is layout-safe and prevents hydration errors.
+    return <div className="h-8 w-8" />; 
   }
 
   return (
     <button
       type="button"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white/80 px-3 py-1 text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:bg-slate-800"
-      aria-label="Toggle light and dark mode"
+      onClick={toggleTheme}
+      className="rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm"
+      aria-label="Toggle theme"
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-blue-600 transition-transform dark:translate-x-2" />
-      {isDark ? "Dark" : "Light"}
+      {theme === "dark" ? "🌙" : "☀️"}
     </button>
   );
 }
-
